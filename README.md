@@ -5,6 +5,30 @@
 ## Visão Geral
 Este projeto propõe o desenvolvimento de uma esteira DevSecOps utilizando ferramentas open source e acessíveis. O foco é garantir que a segurança não seja tratada apenas ao final do ciclo, mas esteja presente desde o versionamento do código até a análise de vulnerabilidades e geração de relatórios.
 
+## 🚀 Como Utilizar a Central DevSecOps (SaaS Interno)
+Este repositório atua como uma **Central DevSecOps** reutilizável. As squads podem integrar as verificações de segurança em suas próprias pipelines sem duplicar código.
+
+Adicione o seguinte job ao seu `.github/workflows/ci.yml`:
+
+```yaml
+jobs:
+  security:
+    uses: alexiaduartt/Esteira-DevSecOps-Open-Source/.github/workflows/pipeline.yml@v1
+    with:
+      project_name: 'meu-projeto'
+      stack_type: 'node' # opções: node, dotnet, python
+      run_dast: true
+      dast_target_url: 'https://staging.meu-projeto.com' # URL para o ZAP (necessário se run_dast=true)
+    secrets:
+      DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+      DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+```
+
+**Benefícios:**
+- **Shadow Mode**: As ferramentas de segurança reportam vulnerabilidades como `::warning::` e as enviam para o DefectDojo sem bloquear ou quebrar a sua pipeline.
+- **Agnóstico**: Suporte integrado para múltiplos ecossistemas (`node`, `dotnet`, `python`).
+- **DefectDojo Dinâmico**: Engajamentos e importação de relatórios ocorrem de forma automatizada via variáveis.
+
 ## Arquitetura e Ferramentas
 A esteira é composta por um fluxo integrado de segurança e qualidade:
 

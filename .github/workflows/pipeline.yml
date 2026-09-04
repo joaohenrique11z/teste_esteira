@@ -1,76 +1,161 @@
-name: Pipeline Base - GitHub Actions
+name: Central DevSecOps - SaaS Interno
 
 on:
-  push:
-    branches: [ "main", "develop" ]
-
-  pull_request:
-    branches: [ "main", "develop" ]
-
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-env:
-  IMAGE_NAME: esteira-devsecops-open-source
+  workflow_call:
+    inputs:
+      project_name:
+        description: 'Nome do projeto (usado no DefectDojo)'
+        required: true
+        type: string
+      stack_type:
+        description: 'Stack do projeto (node, dotnet, python)'
+        required: true
+        type: string
+      run_dast:
+        description: 'Executar análise dinâmica (DAST) com OWASP ZAP'
+        required: false
+        type: boolean
+        default: false
+      dast_target_url:
+        description: 'URL alvo para o scan DAST (ex: http://localhost:3000 ou https://staging.exemplo.com)'
+        required: false
+        type: string
+    secrets:
+      DEFECTDOJO_URL:
+        description: 'URL do DefectDojo'
+        required: true
+      DEFECTDOJO_API_KEY:
+        description: 'Token de API do DefectDojo'
+        required: true
 
 jobs:
-  checkout-node:
-    name: Checkout e configuração do Node.js
+  devsecops-pipeline:
+    name: DevSecOps Scans & Quality Gates
     runs-on: ubuntu-latest
-
     steps:
-      - name: Baixar código do repositório
+      - name: Checkout App Code (Código do Desenvolvedor)
         uses: actions/checkout@v4
+        with:
+          path: app-code
 
-      - name: Configurar Node.js
+      - name: Checkout Security Tools (Central DevSecOps)
+        uses: actions/checkout@v4
+        with:
+          repository: alexiaduartt/Esteira-DevSecOps-Open-Source
+          path: security-tools
+
+      - name: Preparar ambiente Node.js
+        if: inputs.stack_type == 'node'
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: 20
+      - name: Instalar dependências Node.js
+        if: inputs.stack_type == 'node'
+        working-directory: app-code
+        run: npm install || npm ci
 
-      - name: Validar versão do Node.js e NPM
+      - name: Preparar ambiente .NET
+        if: inputs.stack_type == 'dotnet'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Instalar dependências .NET
+        if: inputs.stack_type == 'dotnet'
+        working-directory: app-code
+        run: dotnet restore
+
+      - name: Preparar ambiente Python
+        if: inputs.stack_type == 'python'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar dependências Python
+        if: inputs.stack_type == 'python'
+        working-directory: app-code
         run: |
-          node --version
-          npm --version
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Listar arquivos do projeto
-        run: ls -la
-
-      - name: Instalar dependências
-        run: npm install
-
-      - name: Executar lint
-        run: npm run lint
-
-  docker-build:
-    name: Build da imagem Docker
-    runs-on: ubuntu-latest
-    needs: checkout-node
-
-    steps:
-      - name: Baixar código do repositório
-        uses: actions/checkout@v4
-
-      - name: Validar existência do Dockerfile
+      - name: Executar Gitleaks (Shadow Mode)
         run: |
-          test -f Dockerfile
-          echo "Dockerfile encontrado com sucesso."
+          mkdir -p reports/gitleaks
+          docker run --rm \
+            -v ${{ github.workspace }}/app-code:/code \
+            -v ${{ github.workspace }}/security-tools/security/gitleaks:/config \
+            -v ${{ github.workspace }}/reports/gitleaks:/reports \
+            ghcr.io/gitleaks/gitleaks:latest detect \
+            --source=/code \
+            --config=/config/.gitleaks.toml \
+            --report-format=json \
+            --report-path=/reports/gitleaks-results.json \
+            --redact || true
 
-      - name: Padronizar nome da imagem Docker
+      - name: Executar Semgrep (Shadow Mode)
         run: |
-          echo "Nome da imagem: $IMAGE_NAME"
-          echo "Tag do commit: ${{ github.sha }}"
+          mkdir -p reports/semgrep
+          docker run --rm \
+            -v ${{ github.workspace }}/app-code:/src \
+            -v ${{ github.workspace }}/security-tools/security/semgrep:/config \
+            -v ${{ github.workspace }}/reports/semgrep:/reports \
+            semgrep/semgrep scan \
+            --config "p/owasp-top-ten" \
+            --config "p/nodejs" \
+            --config "/config/rules.yaml" \
+            --json \
+            --output=/reports/semgrep-results.json \
+            /src || true
 
-      - name: Construir imagem Docker
+      - name: Importar SAST & Secrets para DefectDojo
+        env:
+          PROJECT_NAME: ${{ inputs.project_name }}
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
         run: |
-          docker build \
-            --file Dockerfile \
-            --tag $IMAGE_NAME:${{ github.sha }} \
-            --tag $IMAGE_NAME:latest \
-            .
+          bash security-tools/scripts/import-semgrep-gitleaks-defectdojo.sh || true
 
-      - name: Validar imagem Docker gerada
+      - name: Executar Trivy FS (Shadow Mode)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: 'app-code'
+          format: 'json'
+          output: 'reports/trivy/trivy-fs-results.json'
+          exit-code: '0'
+          severity: 'HIGH,CRITICAL'
+
+      - name: Criar diretório reports/trivy (Fallback)
+        run: mkdir -p reports/trivy
+
+      - name: ZAP DAST (Shadow Mode)
+        if: inputs.run_dast == true && inputs.dast_target_url != ''
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: ${{ inputs.dast_target_url }}
+          fail_action: false
+
+      - name: Mover relatórios ZAP
+        if: inputs.run_dast == true && inputs.dast_target_url != ''
         run: |
-          docker images | grep $IMAGE_NAME
-          echo "Imagem Docker gerada com sucesso."
+          mkdir -p reports/zap
+          mv report_json.json reports/zap/ 2>/dev/null || true
+
+      - name: Quality Gate ZAP (Shadow Mode)
+        if: inputs.run_dast == true && inputs.dast_target_url != ''
+        run: |
+          cd security-tools
+          npm install fs || true
+          node scripts/check-zap-gate.js ../reports/zap/report_json.json || true
+
+      - name: Importar SCA & DAST para DefectDojo
+        env:
+          PROJECT_NAME: ${{ inputs.project_name }}
+          DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+          DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+        run: |
+          bash security-tools/scripts/import-trivy-zap-defectdojo.sh || true
+
+      - name: Upload Relatórios
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: devsecops-reports
+          path: reports/
