@@ -92,6 +92,11 @@ jobs:
           fi
         working-directory: app-code
 
+      - name: Create Reports Directories
+        run: |
+          mkdir -p reports/gitleaks reports/semgrep reports/trivy reports/zap
+        working-directory: security-tools
+
       - name: Executar Gitleaks (Shadow Mode)
         run: |
           mkdir -p reports/gitleaks
