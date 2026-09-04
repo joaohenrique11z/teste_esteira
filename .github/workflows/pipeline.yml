@@ -44,6 +44,10 @@ jobs:
           repository: alexiaduartt/Esteira-DevSecOps-Open-Source
           path: security-tools
 
+      - name: Create Reports Directories
+        run: |
+          mkdir -p reports/gitleaks reports/semgrep reports/trivy reports/zap
+
       - name: Preparar ambiente Node.js
         if: inputs.stack_type == 'node'
         uses: actions/setup-node@v4
@@ -92,11 +96,6 @@ jobs:
           fi
         working-directory: app-code
 
-      - name: Create Reports Directories
-        run: |
-          mkdir -p reports/gitleaks reports/semgrep reports/trivy reports/zap
-        working-directory: security-tools
-
       - name: Executar Gitleaks (Shadow Mode)
         run: |
           mkdir -p reports/gitleaks
@@ -143,9 +142,6 @@ jobs:
           output: 'reports/trivy/trivy-fs-results.json'
           exit-code: '0'
           severity: 'HIGH,CRITICAL'
-
-      - name: Criar diretório reports/trivy (Fallback)
-        run: mkdir -p reports/trivy
 
       - name: ZAP DAST (Shadow Mode)
         if: inputs.run_dast == true && inputs.dast_target_url != ''
