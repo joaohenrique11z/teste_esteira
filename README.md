@@ -1,6 +1,6 @@
 # Esteira DevSecOps Open Source
 
-[![Pipeline Base - GitHub Actions](https://github.com/alexiaduartt/Esteira-DevSecOps-Open-Source/actions/workflows/pipeline.yml/badge.svg)](https://github.com/alexiaduartt/Esteira-DevSecOps-Open-Source/actions/workflows/pipeline.yml)
+[![Pipeline Base - GitHub Actions](https://github.com/joaohenrique11z/teste_esteira/actions/workflows/pipeline.yml/badge.svg)](https://github.com/joaohenrique11z/teste_esteira/actions/workflows/pipeline.yml)
 
 ## Visão Geral
 Este projeto propõe o desenvolvimento de uma esteira DevSecOps utilizando ferramentas open source e acessíveis. O foco é garantir que a segurança não seja tratada apenas ao final do ciclo, mas esteja presente desde o versionamento do código até a análise de vulnerabilidades e geração de relatórios.
@@ -13,7 +13,7 @@ Adicione o seguinte job ao seu `.github/workflows/ci.yml`:
 ```yaml
 jobs:
   security:
-    uses: alexiaduartt/Esteira-DevSecOps-Open-Source/.github/workflows/pipeline.yml@v1
+    uses: joaohenrique11z/teste_esteira/.github/workflows/pipeline.yml@v1
     with:
       project_name: 'meu-projeto'
       stack_type: 'node' # opções: node, dotnet, python, java, cpp, go, rust

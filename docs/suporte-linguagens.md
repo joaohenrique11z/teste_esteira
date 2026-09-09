@@ -71,7 +71,7 @@ Este documento detalha todas as stacks/linguagens suportadas pela esteira DevSec
 # Node.js
 jobs:
   security:
-    uses: alexiaduartt/Esteira-DevSecOps-Open-Source/.github/workflows/pipeline.yml@v1
+    uses: joaohenrique11z/teste_esteira/.github/workflows/pipeline.yml@v1
     with:
       project_name: 'meu-projeto-node'
       stack_type: 'node'
@@ -84,7 +84,7 @@ jobs:
 # C/C++
 jobs:
   security:
-    uses: alexiaduartt/Esteira-DevSecOps-Open-Source/.github/workflows/pipeline.yml@v1
+    uses: joaohenrique11z/teste_esteira/.github/workflows/pipeline.yml@v1
     with:
       project_name: 'meu-projeto-cpp'
       stack_type: 'cpp'
@@ -97,7 +97,7 @@ jobs:
 # Go
 jobs:
   security:
-    uses: alexiaduartt/Esteira-DevSecOps-Open-Source/.github/workflows/pipeline.yml@v1
+    uses: joaohenrique11z/teste_esteira/.github/workflows/pipeline.yml@v1
     with:
       project_name: 'meu-projeto-go'
       stack_type: 'go'
@@ -110,7 +110,7 @@ jobs:
 # Rust
 jobs:
   security:
-    uses: alexiaduartt/Esteira-DevSecOps-Open-Source/.github/workflows/pipeline.yml@v1
+    uses: joaohenrique11z/teste_esteira/.github/workflows/pipeline.yml@v1
     with:
       project_name: 'meu-projeto-rust'
       stack_type: 'rust'

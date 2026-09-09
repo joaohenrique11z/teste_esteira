@@ -13,16 +13,16 @@
 
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/alexiaduartt/Esteira-DevSecOps-Open-Source.git"
+    "url": "git+https://github.com/joaohenrique11z/teste_esteira.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/alexiaduartt/Esteira-DevSecOps-Open-Source/issues"
+    "url": "https://github.com/joaohenrique11z/teste_esteira/issues"
   },
-  "homepage": "https://github.com/alexiaduartt/Esteira-DevSecOps-Open-Source#readme",
+  "homepage": "https://github.com/joaohenrique11z/teste_esteira#readme",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.3.0",

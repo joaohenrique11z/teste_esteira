@@ -1,0 +1,18 @@
+name: CI - DevSecOps
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  security:
+    uses: joaohenrique11z/teste_esteira/.github/workflows/pipeline.yml@main
+    with:
+      project_name: 'Teste_da_Esteira'
+      stack_type: 'node'
+      run_dast: false
+    secrets:
+      DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
+      DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
