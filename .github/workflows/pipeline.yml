@@ -28,10 +28,45 @@ on:
         description: 'Token de API do DefectDojo'
         required: true
 
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: 'Nome do projeto (usado no DefectDojo)'
+        required: true
+        type: string
+        default: 'Teste_da_Esteira'
+      stack_type:
+        description: 'Stack do projeto (node, dotnet, python, java, cpp, go, rust)'
+        required: true
+        type: choice
+        options:
+          - node
+          - dotnet
+          - python
+          - java
+          - cpp
+          - go
+          - rust
+        default: 'node'
+      run_dast:
+        description: 'Executar análise dinâmica (DAST) com OWASP ZAP'
+        required: false
+        type: boolean
+        default: false
+      dast_target_url:
+        description: 'URL alvo para o scan DAST'
+        required: false
+        type: string
+
 jobs:
   devsecops-pipeline:
     name: DevSecOps Scans & Quality Gates
     runs-on: ubuntu-latest
+    env:
+      INPUT_PROJECT_NAME: ${{ inputs.project_name || 'Teste_da_Esteira' }}
+      INPUT_STACK_TYPE: ${{ inputs.stack_type || 'node' }}
+      INPUT_RUN_DAST: ${{ inputs.run_dast || false }}
+      INPUT_DAST_TARGET_URL: ${{ inputs.dast_target_url || '' }}
     steps:
       - name: Checkout App Code (Código do Desenvolvedor)
         uses: actions/checkout@v4
@@ -41,7 +76,7 @@ jobs:
       - name: Checkout Security Tools (Central DevSecOps)
         uses: actions/checkout@v4
         with:
-          repository: alexiaduartt/Esteira-DevSecOps-Open-Source
+          repository: joaohenrique11z/teste_esteira
           path: security-tools
 
       - name: Create Reports Directories
@@ -49,48 +84,48 @@ jobs:
           mkdir -p reports/gitleaks reports/semgrep reports/trivy reports/zap
 
       - name: Preparar ambiente Node.js
-        if: inputs.stack_type == 'node'
+        if: env.INPUT_STACK_TYPE == 'node'
         uses: actions/setup-node@v4
         with:
           node-version: 20
           
       - name: Instalar dependências Node.js
-        if: inputs.stack_type == 'node'
+        if: env.INPUT_STACK_TYPE == 'node'
         working-directory: app-code
         run: npm install || npm ci
 
       - name: Preparar ambiente .NET
-        if: inputs.stack_type == 'dotnet'
+        if: env.INPUT_STACK_TYPE == 'dotnet'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
           
       - name: Instalar dependências .NET
-        if: inputs.stack_type == 'dotnet'
+        if: env.INPUT_STACK_TYPE == 'dotnet'
         working-directory: app-code
         run: dotnet restore
 
       - name: Preparar ambiente Python
-        if: inputs.stack_type == 'python'
+        if: env.INPUT_STACK_TYPE == 'python'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           
       - name: Instalar dependências Python
-        if: inputs.stack_type == 'python'
+        if: env.INPUT_STACK_TYPE == 'python'
         working-directory: app-code
         run: |
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Setup Java (Maven/Gradle)
-        if: inputs.stack_type == 'java'
+        if: env.INPUT_STACK_TYPE == 'java'
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
           
       - name: Install Java Dependencies
-        if: inputs.stack_type == 'java'
+        if: env.INPUT_STACK_TYPE == 'java'
         run: |
           if [ -f "pom.xml" ]; then
             mvn clean install -DskipTests || true
@@ -100,13 +135,13 @@ jobs:
         working-directory: app-code
 
       - name: Preparar ambiente C/C++
-        if: inputs.stack_type == 'cpp'
+        if: env.INPUT_STACK_TYPE == 'cpp'
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake
 
       - name: Compilar projeto C/C++
-        if: inputs.stack_type == 'cpp'
+        if: env.INPUT_STACK_TYPE == 'cpp'
         working-directory: app-code
         run: |
           if [ -f "CMakeLists.txt" ]; then
@@ -116,23 +151,23 @@ jobs:
           fi
 
       - name: Preparar ambiente Go
-        if: inputs.stack_type == 'go'
+        if: env.INPUT_STACK_TYPE == 'go'
         uses: actions/setup-go@v5
         with:
           go-version: 'stable'
 
       - name: Instalar dependências Go
-        if: inputs.stack_type == 'go'
+        if: env.INPUT_STACK_TYPE == 'go'
         working-directory: app-code
         run: |
           if [ -f go.mod ]; then go mod download; fi
 
       - name: Preparar ambiente Rust
-        if: inputs.stack_type == 'rust'
+        if: env.INPUT_STACK_TYPE == 'rust'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Instalar dependências Rust
-        if: inputs.stack_type == 'rust'
+        if: env.INPUT_STACK_TYPE == 'rust'
         working-directory: app-code
         run: |
           if [ -f Cargo.toml ]; then cargo fetch || true; fi
@@ -154,19 +189,20 @@ jobs:
         run: |
           mkdir -p reports/semgrep
           SEMGREP_CONFIGS="--config p/owasp-top-ten --config /config/rules.yaml"
-          if [ "${{ inputs.stack_type }}" = "node" ]; then
+          STACK="${{ env.INPUT_STACK_TYPE }}"
+          if [ "$STACK" = "node" ]; then
             SEMGREP_CONFIGS="$SEMGREP_CONFIGS --config p/nodejs"
-          elif [ "${{ inputs.stack_type }}" = "python" ]; then
+          elif [ "$STACK" = "python" ]; then
             SEMGREP_CONFIGS="$SEMGREP_CONFIGS --config p/python"
-          elif [ "${{ inputs.stack_type }}" = "java" ]; then
+          elif [ "$STACK" = "java" ]; then
             SEMGREP_CONFIGS="$SEMGREP_CONFIGS --config p/java"
-          elif [ "${{ inputs.stack_type }}" = "dotnet" ]; then
+          elif [ "$STACK" = "dotnet" ]; then
             SEMGREP_CONFIGS="$SEMGREP_CONFIGS --config p/csharp"
-          elif [ "${{ inputs.stack_type }}" = "cpp" ]; then
+          elif [ "$STACK" = "cpp" ]; then
             SEMGREP_CONFIGS="$SEMGREP_CONFIGS --config p/c"
-          elif [ "${{ inputs.stack_type }}" = "go" ]; then
+          elif [ "$STACK" = "go" ]; then
             SEMGREP_CONFIGS="$SEMGREP_CONFIGS --config p/golang"
-          elif [ "${{ inputs.stack_type }}" = "rust" ]; then
+          elif [ "$STACK" = "rust" ]; then
             SEMGREP_CONFIGS="$SEMGREP_CONFIGS --config p/rust"
           fi
           docker run --rm \
@@ -190,14 +226,14 @@ jobs:
           severity: 'HIGH,CRITICAL'
 
       - name: ZAP DAST (Shadow Mode)
-        if: inputs.run_dast == true && inputs.dast_target_url != ''
+        if: env.INPUT_RUN_DAST == 'true' && env.INPUT_DAST_TARGET_URL != ''
         uses: zaproxy/action-baseline@v0.14.0
         with:
-          target: ${{ inputs.dast_target_url }}
+          target: ${{ env.INPUT_DAST_TARGET_URL }}
           fail_action: false
 
       - name: Mover relatórios ZAP
-        if: inputs.run_dast == true && inputs.dast_target_url != ''
+        if: env.INPUT_RUN_DAST == 'true' && env.INPUT_DAST_TARGET_URL != ''
         run: |
           mv report_json.json reports/zap/ 2>/dev/null || true
 
