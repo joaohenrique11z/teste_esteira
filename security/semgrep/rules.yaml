@@ -162,7 +162,7 @@ rules:
     severity: ERROR
     metadata:
       owasp: "A03:2021 - Injection"
-      cwe: "CWE-120/CWE-121"
+      cwe: "CWE-676"
       category: "buffer overflow"
 
   - id: cpp-malloc-without-null-check
