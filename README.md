@@ -262,6 +262,90 @@ Para informações detalhadas sobre a cobertura de cada scanner por stack, inclu
 
 ---
 
+## Organizando o DefectDojo
+
+Esta seção explica como manter o DefectDojo organizado para que os relatórios de segurança da esteira façam sentido no painel e sejam úteis de verdade.
+
+### 1. O que são Product, Engagement e Test
+
+O DefectDojo organiza os dados em três níveis:
+
+| Conceito | Analogia simples | Exemplo real nesta esteira |
+|----------|-----------------|---------------------------|
+| **Product** | O projeto em si | O valor de `project_name` passado no workflow (ex: `Teste_da_Esteira`) |
+| **Engagement** | Uma rodada de testes — pense numa sprint ou num ciclo de análise | Um Engagement criado dentro do Product para agrupar as execuções |
+| **Test** | Cada scanner individual dentro dessa rodada | Os 4 testes fixos usados pela pipeline |
+
+Os **4 Tests** que a pipeline usa hoje, com seus IDs fixos e scan types exatos (os mesmos que aparecem nos steps de `curl` do `pipeline.yml`):
+
+| Test ID | scan_type (exato) | Scanner | Relatório |
+|---------|-------------------|---------|-----------|
+| `1` | `Semgrep JSON Report` | Semgrep (SAST) | `reports/semgrep/semgrep-results.json` |
+| `2` | `Gitleaks Scan` | Gitleaks (secrets) | `reports/gitleaks/gitleaks-results.json` |
+| `3` | `Trivy Scan` | Trivy (SCA) | `reports/trivy/trivy-fs-results.json` |
+| `4` | `ZAP Scan` | OWASP ZAP (DAST) | `reports/zap/report_json.json` |
+
+A pipeline usa o endpoint `/api/v2/reimport-scan/` (não `/api/v2/import-scan/`) justamente para **atualizar** esses Tests existentes a cada execução, sem criar duplicatas de Test toda vez.
+
+---
+
+### 2. Como criar e ajustar um Engagement
+
+Ao criar um Engagement no DefectDojo, você define uma **data de início** e uma **data de fim**. Atenção a dois pontos:
+
+- Se a data de fim passar e o status do Engagement continuar como **"In Progress"**, ele aparece como **"Overdue"** (atrasado) no painel. Isso é **só visual** — não trava nem impede novos reimports. A pipeline continua funcionando normalmente.
+- Mesmo assim, o ideal é **manter as datas alinhadas com o período real** do seu projeto ou sprint. Se a sprint é de 2 semanas, coloque a data de fim correspondente. Quando acabar, crie um novo Engagement para o próximo ciclo. Isso evita confusão quando alguém for olhar o painel depois.
+
+**Na prática:** se o Engagement ficou "Overdue", entre no DefectDojo → abra o Engagement → edite as datas ou crie um novo Engagement com datas atualizadas. Lembre-se de atualizar os Test IDs na pipeline se os testes forem recriados dentro de um novo Engagement.
+
+---
+
+### 3. Como tratar duplicidades
+
+Quando o mesmo scanner roda várias vezes via reimport, o DefectDojo tenta **identificar findings repetidos automaticamente** (deduplicação). Ele compara título, CWE, arquivo, linha e outros campos para decidir se um finding novo é duplicata de um existente.
+
+Mas isso **não é 100% garantido**. Pode acontecer de:
+- Um finding ser marcado como duplicata quando na verdade é diferente (arquivo ou severidade diferente).
+- Um finding não ser marcado como duplicata quando deveria (pequena mudança no texto do achado).
+
+**O que fazer:**
+1. Periodicamente, entre no Engagement no DefectDojo.
+2. Vá na aba **"Achados"** (Findings).
+3. Filtre por **"Duplicate"** para ver os achados marcados como duplicados.
+4. Confira manualmente se eles realmente são duplicados — compare arquivo, linha, severidade e descrição.
+5. **Não apague** achados que pareçam duplicados mas tenham diferenças relevantes. Em caso de dúvida, desmarque como duplicata e trate como achado independente.
+
+---
+
+### 4. Como definir e usar os Status dos findings
+
+Cada finding no DefectDojo tem um status que indica o que está acontecendo com ele. Mudar o status é uma **decisão humana** — você faz isso entrando no finding específico no painel e atualizando. Faça isso regularmente, não só uma vez.
+
+| Status | O que significa na prática |
+|--------|---------------------------|
+| **Active** | O problema ainda existe no código e ninguém resolveu ainda. Todo finding novo entra com esse status. |
+| **Verified** | Alguém da equipe olhou e confirmou que é um problema real (não é alarme falso). |
+| **Mitigated** | O problema já foi corrigido — o fix já está no código. |
+| **Risk Accepted** | A equipe decidiu conviver com esse risco. Pode ser porque o impacto é baixo, a correção é inviável no momento, ou existe um controle compensatório. Documente o motivo. |
+| **False Positive** | Não é um problema de verdade. O scanner errou — o código é seguro nesse ponto. |
+
+> **Dica:** a revisão de status deve ser uma atividade recorrente (ex: a cada sprint ou a cada semana). Não adianta rodar os scanners se ninguém olha os achados depois.
+
+---
+
+### 5. Checklist rápido de organização
+
+Use esta lista sempre que for revisar o DefectDojo do projeto:
+
+- [ ] Os 4 scanners (**Semgrep**, **Gitleaks**, **Trivy**, **ZAP**) têm reimports recentes? Verifique a data do último import em cada Test.
+- [ ] Existem findings marcados como **"Duplicate"** que precisam de revisão manual?
+- [ ] Os findings que já foram corrigidos no código estão marcados como **"Mitigated"**?
+- [ ] Os findings confirmados como alarmes falsos estão marcados como **"False Positive"**?
+- [ ] As datas do Engagement ainda fazem sentido ou ele está aparecendo como **"Overdue"**?
+- [ ] Existe algum finding **"Active"** antigo que precisa de decisão — corrigir, aceitar o risco ou marcar como falso positivo?
+
+---
+
 ## Equipe
 
 - Alexia Josielly Duarte da Silva Alves
