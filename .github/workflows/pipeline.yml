@@ -341,6 +341,7 @@ jobs:
             -F "scan_type=Semgrep JSON Report" \
             -F "file=@reports/semgrep/semgrep-results.json" \
             -F "product_name=${{ env.INPUT_PROJECT_NAME }}" \
+            -F "product_type_name=Esteira DevSecOps MouraTech" \
             -F "engagement_name=Automated CI/CD" \
             -F "auto_create_context=true" \
             -F "active=true" \
@@ -354,6 +355,7 @@ jobs:
             -F "scan_type=Gitleaks Scan" \
             -F "file=@reports/gitleaks/gitleaks-results.json" \
             -F "product_name=${{ env.INPUT_PROJECT_NAME }}" \
+            -F "product_type_name=Esteira DevSecOps MouraTech" \
             -F "engagement_name=Automated CI/CD" \
             -F "auto_create_context=true" \
             -F "active=true" \
@@ -367,6 +369,7 @@ jobs:
             -F "scan_type=Trivy Scan" \
             -F "file=@reports/trivy/trivy-fs-results.json" \
             -F "product_name=${{ env.INPUT_PROJECT_NAME }}" \
+            -F "product_type_name=Esteira DevSecOps MouraTech" \
             -F "engagement_name=Automated CI/CD" \
             -F "auto_create_context=true" \
             -F "active=true" \
@@ -380,6 +383,7 @@ jobs:
             -F "scan_type=ZAP Scan" \
             -F "file=@reports/zap/report_json.json" \
             -F "product_name=${{ env.INPUT_PROJECT_NAME }}" \
+            -F "product_type_name=Esteira DevSecOps MouraTech" \
             -F "engagement_name=Automated CI/CD" \
             -F "auto_create_context=true" \
             -F "active=true" \
