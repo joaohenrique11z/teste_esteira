@@ -8,9 +8,14 @@ on:
         required: true
         type: string
       stack_type:
-        description: 'Stack do projeto (node, dotnet, python, java, cpp, go, rust)'
+        description: 'Stack do projeto (node, python, java, go, rust, cpp, php, ruby, dotnet, flutter)'
         required: true
         type: string
+      working_directory:
+        description: 'Subdiretório do projeto dentro do repositório (ex: photo-studio/). Default: raiz.'
+        required: false
+        type: string
+        default: '.'
       run_dast:
         description: 'Executar análise dinâmica (DAST) com OWASP ZAP'
         required: false
@@ -36,18 +41,26 @@ on:
         type: string
         default: 'Teste_da_Esteira'
       stack_type:
-        description: 'Stack do projeto (node, dotnet, python, java, cpp, go, rust)'
+        description: 'Stack do projeto (node, python, java, go, rust, cpp, php, ruby, dotnet, flutter)'
         required: true
         type: choice
         options:
           - node
-          - dotnet
           - python
           - java
-          - cpp
           - go
           - rust
+          - cpp
+          - php
+          - ruby
+          - dotnet
+          - flutter
         default: 'node'
+      working_directory:
+        description: 'Subdiretório do projeto dentro do repositório (ex: photo-studio/). Default: raiz.'
+        required: false
+        type: string
+        default: '.'
       run_dast:
         description: 'Executar análise dinâmica (DAST) com OWASP ZAP'
         required: false
@@ -65,6 +78,7 @@ jobs:
     env:
       INPUT_PROJECT_NAME: ${{ inputs.project_name || 'Teste_da_Esteira' }}
       INPUT_STACK_TYPE: ${{ inputs.stack_type || 'node' }}
+      INPUT_WORKING_DIRECTORY: ${{ inputs.working_directory || '.' }}
       INPUT_RUN_DAST: ${{ inputs.run_dast || false }}
       INPUT_DAST_TARGET_URL: ${{ inputs.dast_target_url || '' }}
     steps:
@@ -79,43 +93,126 @@ jobs:
           repository: joaohenrique11z/teste_esteira
           path: security-tools
 
-      - name: Create Reports Directories
+      # ──────────────────────────────────────────────────────────────────────
+      # Resolve o caminho real do projeto dentro do checkout app-code.
+      # Repositórios que não passam working_directory recebem default "."
+      # e continuam apontando para app-code — retrocompatibilidade total.
+      # ──────────────────────────────────────────────────────────────────────
+      - name: Resolve app path
+        id: app-path
         run: |
-          mkdir -p reports/gitleaks reports/semgrep reports/trivy reports/zap
+          APP_PATH="app-code/${{ env.INPUT_WORKING_DIRECTORY }}"
+          # Remove trailing slash redundante para evitar duplo // nos steps
+          APP_PATH="${APP_PATH%/}"
+          echo "path=${APP_PATH}" >> "$GITHUB_OUTPUT"
 
+      # ──────────────────────────────────────────────────────────────────────
+      # Detecta o toolchain correto inspecionando lockfiles / manifests
+      # dentro do diretório do projeto (pode ser subdiretório).
+      # Expõe install_cmd para uso no step "Install dependencies".
+      # ──────────────────────────────────────────────────────────────────────
+      - name: Detect build toolchain
+        id: toolchain
+        working-directory: ${{ steps.app-path.outputs.path }}
+        run: |
+          STACK="${{ env.INPUT_STACK_TYPE }}"
+          install_cmd=""
+
+          case "$STACK" in
+            node)
+              if [ -f "pnpm-lock.yaml" ]; then
+                install_cmd="pnpm install --frozen-lockfile"
+              elif [ -f "yarn.lock" ]; then
+                install_cmd="yarn install --frozen-lockfile"
+              elif [ -f "package-lock.json" ]; then
+                install_cmd="npm ci"
+              else
+                install_cmd="npm install"
+              fi
+              ;;
+            python)
+              if [ -f "poetry.lock" ]; then
+                install_cmd="poetry install"
+              elif [ -f "requirements.txt" ]; then
+                install_cmd="pip install -r requirements.txt"
+              fi
+              ;;
+            java)
+              if [ -f "pom.xml" ]; then
+                install_cmd="mvn -B install -DskipTests"
+              elif ls build.gradle* >/dev/null 2>&1; then
+                install_cmd="./gradlew build -x test"
+              fi
+              ;;
+            go)
+              if [ -f "go.mod" ]; then
+                install_cmd="go mod download"
+              fi
+              ;;
+            rust)
+              if [ -f "Cargo.toml" ]; then
+                install_cmd="cargo fetch"
+              fi
+              ;;
+            cpp)
+              if [ -f "CMakeLists.txt" ]; then
+                install_cmd="cmake -S . -B build"
+              elif [ -f "Makefile" ]; then
+                install_cmd="make"
+              fi
+              ;;
+            php)
+              if [ -f "composer.lock" ]; then
+                install_cmd="composer install --no-interaction --prefer-dist"
+              fi
+              ;;
+            ruby)
+              if [ -f "Gemfile.lock" ]; then
+                install_cmd="bundle install"
+              fi
+              ;;
+            dotnet)
+              if ls *.csproj >/dev/null 2>&1 || ls *.sln >/dev/null 2>&1; then
+                install_cmd="dotnet restore"
+              fi
+              ;;
+            flutter)
+              if [ -f "pubspec.lock" ]; then
+                install_cmd="flutter pub get"
+              fi
+              ;;
+          esac
+
+          echo "install_cmd=${install_cmd}" >> "$GITHUB_OUTPUT"
+          echo "Toolchain detectado: stack=${STACK}, cmd=${install_cmd}"
+
+      # ──────────────────────────────────────────────────────────────────────
+      # Setups de ambiente (apenas configuração do runner, sem instalar deps)
+      # ──────────────────────────────────────────────────────────────────────
       - name: Preparar ambiente Node.js
         if: env.INPUT_STACK_TYPE == 'node'
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          
-      - name: Instalar dependências Node.js
-        if: env.INPUT_STACK_TYPE == 'node'
-        working-directory: app-code
-        run: npm install || npm ci
+
+      - name: Enable Corepack (for pnpm/yarn)
+        if: >-
+          env.INPUT_STACK_TYPE == 'node' &&
+          (contains(steps.toolchain.outputs.install_cmd, 'pnpm') ||
+           contains(steps.toolchain.outputs.install_cmd, 'yarn'))
+        run: corepack enable
 
       - name: Preparar ambiente .NET
         if: env.INPUT_STACK_TYPE == 'dotnet'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-          
-      - name: Instalar dependências .NET
-        if: env.INPUT_STACK_TYPE == 'dotnet'
-        working-directory: app-code
-        run: dotnet restore
 
       - name: Preparar ambiente Python
         if: env.INPUT_STACK_TYPE == 'python'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          
-      - name: Instalar dependências Python
-        if: env.INPUT_STACK_TYPE == 'python'
-        working-directory: app-code
-        run: |
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Setup Java (Maven/Gradle)
         if: env.INPUT_STACK_TYPE == 'java'
@@ -123,16 +220,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          
-      - name: Install Java Dependencies
-        if: env.INPUT_STACK_TYPE == 'java'
-        run: |
-          if [ -f "pom.xml" ]; then
-            mvn clean install -DskipTests || true
-          elif [ -f "build.gradle" ] || [ -f "build.gradle.kts" ]; then
-            ./gradlew build -x test || true
-          fi
-        working-directory: app-code
 
       - name: Preparar ambiente C/C++
         if: env.INPUT_STACK_TYPE == 'cpp'
@@ -140,37 +227,33 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential cmake
 
-      - name: Compilar projeto C/C++
-        if: env.INPUT_STACK_TYPE == 'cpp'
-        working-directory: app-code
-        run: |
-          if [ -f "CMakeLists.txt" ]; then
-            mkdir -p build && cd build && cmake .. && make || true
-          elif [ -f "Makefile" ]; then
-            make || true
-          fi
-
       - name: Preparar ambiente Go
         if: env.INPUT_STACK_TYPE == 'go'
         uses: actions/setup-go@v5
         with:
           go-version: 'stable'
 
-      - name: Instalar dependências Go
-        if: env.INPUT_STACK_TYPE == 'go'
-        working-directory: app-code
-        run: |
-          if [ -f go.mod ]; then go mod download; fi
-
       - name: Preparar ambiente Rust
         if: env.INPUT_STACK_TYPE == 'rust'
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Instalar dependências Rust
-        if: env.INPUT_STACK_TYPE == 'rust'
-        working-directory: app-code
+      # ──────────────────────────────────────────────────────────────────────
+      # Step unificado de instalação de dependências.
+      # Usa o comando detectado pelo toolchain e o diretório resolvido.
+      # Se install_cmd estiver vazio (stack não reconhecida ou sem lockfile),
+      # o step é pulado silenciosamente.
+      # ──────────────────────────────────────────────────────────────────────
+      - name: Install dependencies
+        if: steps.toolchain.outputs.install_cmd != ''
+        working-directory: ${{ steps.app-path.outputs.path }}
+        run: ${{ steps.toolchain.outputs.install_cmd }}
+
+      # ──────────────────────────────────────────────────────────────────────
+      # Security Scans — Shadow Mode (continue-on-error implícito via || true)
+      # ──────────────────────────────────────────────────────────────────────
+      - name: Create Reports Directories
         run: |
-          if [ -f Cargo.toml ]; then cargo fetch || true; fi
+          mkdir -p reports/gitleaks reports/semgrep reports/trivy reports/zap
 
       - name: Executar Gitleaks (Shadow Mode)
         run: |
@@ -204,6 +287,10 @@ jobs:
             SEMGREP_CONFIGS="$SEMGREP_CONFIGS --config p/golang"
           elif [ "$STACK" = "rust" ]; then
             SEMGREP_CONFIGS="$SEMGREP_CONFIGS --config p/rust"
+          elif [ "$STACK" = "php" ]; then
+            SEMGREP_CONFIGS="$SEMGREP_CONFIGS --config p/php"
+          elif [ "$STACK" = "ruby" ]; then
+            SEMGREP_CONFIGS="$SEMGREP_CONFIGS --config p/ruby"
           fi
           docker run --rm \
             -v ${{ github.workspace }}/app-code:/src \
@@ -215,11 +302,13 @@ jobs:
             --output=/reports/semgrep-results.json \
             /src || true
 
+      # Trivy FS aponta para o subdiretório do projeto para analisar
+      # lockfiles e manifests corretos (ex: photo-studio/pnpm-lock.yaml).
       - name: Executar Trivy FS (Shadow Mode)
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
-          scan-ref: 'app-code'
+          scan-ref: ${{ steps.app-path.outputs.path }}
           format: 'json'
           output: 'reports/trivy/trivy-fs-results.json'
           exit-code: '0'

@@ -259,6 +259,9 @@ Para informações detalhadas sobre a cobertura de cada scanner por stack, inclu
 | C/C++ | `cpp` | build-essential + cmake |
 | Go | `go` | stable |
 | Rust | `rust` | stable |
+| PHP | `php` | runner default |
+| Ruby | `ruby` | runner default |
+| Flutter | `flutter` | runner default |
 
 ---
 
