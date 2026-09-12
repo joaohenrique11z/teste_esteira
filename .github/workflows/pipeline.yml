@@ -333,46 +333,54 @@ jobs:
           name: devsecops-reports
           path: reports/
 
-      - name: Reimport Semgrep results to DefectDojo
+      - name: Import Semgrep results to DefectDojo
         if: always()
         run: |
-          curl -X POST "${{ secrets.DEFECTDOJO_URL }}/api/v2/reimport-scan/" \
+          curl -X POST "${{ secrets.DEFECTDOJO_URL }}/api/v2/import-scan/" \
             -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
             -F "scan_type=Semgrep JSON Report" \
             -F "file=@reports/semgrep/semgrep-results.json" \
-            -F "test=1" \
+            -F "product_name=${{ env.INPUT_PROJECT_NAME }}" \
+            -F "engagement_name=Automated CI/CD" \
+            -F "auto_create_context=true" \
             -F "active=true" \
             -F "verified=true"
 
-      - name: Reimport Gitleaks results to DefectDojo
+      - name: Import Gitleaks results to DefectDojo
         if: always()
         run: |
-          curl -X POST "${{ secrets.DEFECTDOJO_URL }}/api/v2/reimport-scan/" \
+          curl -X POST "${{ secrets.DEFECTDOJO_URL }}/api/v2/import-scan/" \
             -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
             -F "scan_type=Gitleaks Scan" \
             -F "file=@reports/gitleaks/gitleaks-results.json" \
-            -F "test=2" \
+            -F "product_name=${{ env.INPUT_PROJECT_NAME }}" \
+            -F "engagement_name=Automated CI/CD" \
+            -F "auto_create_context=true" \
             -F "active=true" \
             -F "verified=true"
 
-      - name: Reimport Trivy results to DefectDojo
+      - name: Import Trivy results to DefectDojo
         if: always()
         run: |
-          curl -X POST "${{ secrets.DEFECTDOJO_URL }}/api/v2/reimport-scan/" \
+          curl -X POST "${{ secrets.DEFECTDOJO_URL }}/api/v2/import-scan/" \
             -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
             -F "scan_type=Trivy Scan" \
             -F "file=@reports/trivy/trivy-fs-results.json" \
-            -F "test=3" \
+            -F "product_name=${{ env.INPUT_PROJECT_NAME }}" \
+            -F "engagement_name=Automated CI/CD" \
+            -F "auto_create_context=true" \
             -F "active=true" \
             -F "verified=true"
 
-      - name: Reimport ZAP results to DefectDojo
+      - name: Import ZAP results to DefectDojo
         if: env.INPUT_RUN_DAST == 'true' && env.INPUT_DAST_TARGET_URL != ''
         run: |
-          curl -X POST "${{ secrets.DEFECTDOJO_URL }}/api/v2/reimport-scan/" \
+          curl -X POST "${{ secrets.DEFECTDOJO_URL }}/api/v2/import-scan/" \
             -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
             -F "scan_type=ZAP Scan" \
             -F "file=@reports/zap/report_json.json" \
-            -F "test=4" \
+            -F "product_name=${{ env.INPUT_PROJECT_NAME }}" \
+            -F "engagement_name=Automated CI/CD" \
+            -F "auto_create_context=true" \
             -F "active=true" \
             -F "verified=true"
