@@ -1,4 +1,12 @@
-name: CI - DevSecOps
+name: CI - Auto-teste da Esteira DevSecOps
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Este workflow valida que a esteira funciona corretamente em múltiplas stacks.
+# Usa skip_defectdojo: true para NÃO enviar findings de teste para o
+# DefectDojo de produção — os relatórios são gerados como artifacts apenas.
+#
+# As fixtures de teste ficam em .github/self-test-fixtures/<stack>/
+# ─────────────────────────────────────────────────────────────────────────────
 
 on:
   push:
@@ -7,12 +15,32 @@ on:
     branches: [main, develop]
 
 jobs:
-  security:
+  test-node:
+    name: "Self-Test: Node.js"
     uses: joaohenrique11z/teste_esteira/.github/workflows/pipeline.yml@main
     with:
-      project_name: 'Teste_da_Esteira'
+      project_name: 'Self-Test-Node'
       stack_type: 'node'
+      working_directory: '.github/self-test-fixtures/node'
+      skip_defectdojo: true
       run_dast: false
-    secrets:
-      DEFECTDOJO_URL: ${{ secrets.DEFECTDOJO_URL }}
-      DEFECTDOJO_API_KEY: ${{ secrets.DEFECTDOJO_API_KEY }}
+
+  test-cpp:
+    name: "Self-Test: C/C++"
+    uses: joaohenrique11z/teste_esteira/.github/workflows/pipeline.yml@main
+    with:
+      project_name: 'Self-Test-CPP'
+      stack_type: 'cpp'
+      working_directory: '.github/self-test-fixtures/cpp'
+      skip_defectdojo: true
+      run_dast: false
+
+  test-go:
+    name: "Self-Test: Go"
+    uses: joaohenrique11z/teste_esteira/.github/workflows/pipeline.yml@main
+    with:
+      project_name: 'Self-Test-Go'
+      stack_type: 'go'
+      working_directory: '.github/self-test-fixtures/go'
+      skip_defectdojo: true
+      run_dast: false

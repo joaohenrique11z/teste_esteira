@@ -12,7 +12,7 @@ Este repositório é a **Central DevSecOps** da equipe — uma esteira de segura
 
 - **Centralização**: Um único repositório contém toda a lógica de segurança. Correções e novas ferramentas são propagadas automaticamente para todos os projetos consumidores.
 - **Shadow Mode**: Nenhum scanner bloqueia a pipeline do projeto consumidor. Todos os findings são reportados como `::warning::` e exportados para análise posterior — a build **nunca quebra** por causa de uma vulnerabilidade detectada.
-- **Multi-Stack**: Suporte nativo para **7 ecossistemas** — `node`, `dotnet`, `python`, `java`, `cpp`, `go` e `rust`.
+- **Multi-Stack**: Suporte nativo para **10 ecossistemas** — `node`, `python`, `java`, `go`, `rust`, `cpp`, `php`, `ruby`, `dotnet` e `flutter`.
 
 ---
 
@@ -28,18 +28,22 @@ A esteira opera com dois arquivos de workflow distintos:
 │                                                                 │
 │  .github/workflows/pipeline.yml   ← Reusable Workflow          │
 │    • Trigger: workflow_call (consumidores) + workflow_dispatch   │
-│    • Inputs: project_name, stack_type, run_dast, dast_target_url│
-│    • Secrets: DEFECTDOJO_URL, DEFECTDOJO_API_KEY                │
+│    • Inputs: project_name, stack_type, working_directory,       │
+│              run_dast, dast_target_url, skip_defectdojo         │
+│    • Secrets: DEFECTDOJO_URL, DEFECTDOJO_API_KEY (opcionais)    │
 │    • Jobs: setup stack → Gitleaks → Semgrep → Trivy → ZAP      │
 │                                                                 │
 │  .github/workflows/ci.yml         ← Auto-teste interno         │
 │    • Trigger: push/pull_request em main e develop               │
-│    • Chama pipeline.yml via workflow_call para validar a esteira│
+│    • Chama pipeline.yml com skip_defectdojo: true               │
+│    • Testa 3 stacks (node, cpp, go) em paralelo                │
+│    • Fixtures em .github/self-test-fixtures/<stack>/            │
+│    • NÃO envia findings para o DefectDojo de produção           │
 └─────────────────────────────────────────────────────────────────┘
          ▲
          │  uses: joaohenrique11z/teste_esteira/...pipeline.yml@v1
          │
-┌────────┴──────────────────────────────────────┐
+┌────────┴──────────────────────────────────────────────┐
 │  PROJETO CONSUMIDOR (qualquer repositório)     │
 │                                                │
 │  .github/workflows/ci.yml                      │
@@ -56,9 +60,24 @@ Este é o coração da solução. Definido como um **Reusable Workflow** (`on: w
 **O que ele faz em ordem:**
 
 1. **Checkout duplo** — clona o código do projeto consumidor (`app-code`) e as ferramentas de segurança desta central (`security-tools`).
-2. **Setup da stack** — instala o toolchain correto com base no `stack_type` informado (Node 20, .NET 8, Python 3.12, Java 17, C/C++ build-essential, Go stable, Rust stable).
-3. **Scanners de segurança** — executa Gitleaks, Semgrep, Trivy e (opcionalmente) OWASP ZAP.
-4. **Upload de artefatos** — empacota todos os relatórios JSON em um artefato `devsecops-reports`.
+2. **Resolve app path** — calcula o caminho real do projeto usando `working_directory` (suporta subdiretórios como `photo-studio/`).
+3. **Detect build toolchain** — detecta automaticamente o gerenciador de pacotes correto (npm/pnpm/yarn, pip/poetry, mvn/gradle, etc.).
+4. **Setup da stack** — instala o toolchain correto com base no `stack_type` informado.
+5. **Scanners de segurança** — executa Gitleaks, Semgrep, Trivy e (opcionalmente) OWASP ZAP.
+6. **Upload de artefatos** — empacota todos os relatórios JSON em um artefato `devsecops-reports`.
+7. **Import para DefectDojo** — envia os resultados para o DefectDojo via API (pulado se `skip_defectdojo: true`).
+
+### `ci.yml` — Auto-teste Interno
+
+O arquivo `ci.yml` neste repositório é o **auto-teste da própria esteira**. Ele roda em todo push/PR para `main`/`develop` e valida que os scanners continuam funcionando corretamente em múltiplas stacks.
+
+**Características:**
+- Usa `skip_defectdojo: true` — **nenhum finding de teste é enviado para o DefectDojo de produção**
+- Testa 3 stacks em paralelo: Node.js, C/C++ e Go
+- As fixtures de código vulnerável ficam em `.github/self-test-fixtures/<stack>/`
+- Validação: se os scanners rodam sem erro e geram os relatórios JSON como artifacts, a esteira está funcionando
+
+> **Nota:** As fixtures em `.github/self-test-fixtures/` contêm código **propositalmente inseguro** para garantir que os scanners detectem vulnerabilidades. Esses achados nunca aparecem no DefectDojo de produção.
 
 ### `ci.yml` — Arquivo do Projeto Consumidor
 
@@ -190,9 +209,11 @@ jobs:
 | Parâmetro | Tipo | Obrigatório | Descrição |
 |-----------|------|-------------|-----------|
 | `project_name` | `string` | ✅ Sim | Nome do projeto, usado para identificar o produto/engagement no DefectDojo |
-| `stack_type` | `string` | ✅ Sim | Stack tecnológica: `node`, `dotnet`, `python`, `java`, `cpp`, `go`, `rust` |
+| `stack_type` | `string` | ✅ Sim | Stack tecnológica: `node`, `python`, `java`, `go`, `rust`, `cpp`, `php`, `ruby`, `dotnet`, `flutter` |
+| `working_directory` | `string` | Não (default: `.`) | Subdiretório do projeto dentro do repositório (ex: `photo-studio/`) |
 | `run_dast` | `boolean` | Não (default: `false`) | Habilita o scan dinâmico com OWASP ZAP |
 | `dast_target_url` | `string` | Só se `run_dast: true` | URL da aplicação web/API alvo para o ZAP |
+| `skip_defectdojo` | `boolean` | Não (default: `false`) | Pula o envio de findings para o DefectDojo (usado no auto-teste interno) |
 
 ### Secrets
 
@@ -269,26 +290,19 @@ Para informações detalhadas sobre a cobertura de cada scanner por stack, inclu
 
 Esta seção explica como manter o DefectDojo organizado para que os relatórios de segurança da esteira façam sentido no painel e sejam úteis de verdade.
 
-### 1. O que são Product, Engagement e Test
+### 1. Como funciona a integração
 
 O DefectDojo organiza os dados em três níveis:
 
 | Conceito | Analogia simples | Exemplo real nesta esteira |
 |----------|-----------------|---------------------------|
-| **Product** | O projeto em si | O valor de `project_name` passado no workflow (ex: `Teste_da_Esteira`) |
-| **Engagement** | Uma rodada de testes — pense numa sprint ou num ciclo de análise | Um Engagement criado dentro do Product para agrupar as execuções |
-| **Test** | Cada scanner individual dentro dessa rodada | Os 4 testes fixos usados pela pipeline |
+| **Product** | O projeto em si | O valor de `project_name` passado no workflow (ex: `Meu-Projeto`) |
+| **Product Type** | A organização/time | `Esteira DevSecOps MouraTech` (fixo na pipeline) |
+| **Engagement** | Uma rodada de testes | `Automated CI/CD` (criado automaticamente) |
 
-Os **4 Tests** que a pipeline usa hoje, com seus IDs fixos e scan types exatos (os mesmos que aparecem nos steps de `curl` do `pipeline.yml`):
+A pipeline usa o endpoint `/api/v2/import-scan/` com `auto_create_context=true`, que cria automaticamente o **Product**, **Engagement** e **Test** no DefectDojo com base no `project_name`. Cada squad que consome a Central com um `project_name` diferente terá seus findings isolados automaticamente.
 
-| Test ID | scan_type (exato) | Scanner | Relatório |
-|---------|-------------------|---------|-----------|
-| `1` | `Semgrep JSON Report` | Semgrep (SAST) | `reports/semgrep/semgrep-results.json` |
-| `2` | `Gitleaks Scan` | Gitleaks (secrets) | `reports/gitleaks/gitleaks-results.json` |
-| `3` | `Trivy Scan` | Trivy (SCA) | `reports/trivy/trivy-fs-results.json` |
-| `4` | `ZAP Scan` | OWASP ZAP (DAST) | `reports/zap/report_json.json` |
-
-A pipeline usa o endpoint `/api/v2/reimport-scan/` (não `/api/v2/import-scan/`) justamente para **atualizar** esses Tests existentes a cada execução, sem criar duplicatas de Test toda vez.
+> **Nota sobre o auto-teste interno:** o `ci.yml` deste repositório usa `skip_defectdojo: true`, garantindo que as fixtures de código vulnerável em `.github/self-test-fixtures/` **nunca poluam o DefectDojo de produção** com achados falsos.
 
 ---
 
