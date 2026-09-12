@@ -25,18 +25,13 @@ on:
         description: 'URL alvo para o scan DAST (ex: http://localhost:3000 ou https://staging.exemplo.com)'
         required: false
         type: string
-      skip_defectdojo:
-        description: 'Pular envio de relatórios para o DefectDojo (útil para auto-testes internos)'
-        required: false
-        type: boolean
-        default: false
     secrets:
       DEFECTDOJO_URL:
         description: 'URL do DefectDojo'
-        required: false
+        required: true
       DEFECTDOJO_API_KEY:
         description: 'Token de API do DefectDojo'
-        required: false
+        required: true
 
   workflow_dispatch:
     inputs:
@@ -75,11 +70,6 @@ on:
         description: 'URL alvo para o scan DAST'
         required: false
         type: string
-      skip_defectdojo:
-        description: 'Pular envio de relatórios para o DefectDojo'
-        required: false
-        type: boolean
-        default: false
 
 jobs:
   devsecops-pipeline:
@@ -91,7 +81,6 @@ jobs:
       INPUT_WORKING_DIRECTORY: ${{ inputs.working_directory || '.' }}
       INPUT_RUN_DAST: ${{ inputs.run_dast || false }}
       INPUT_DAST_TARGET_URL: ${{ inputs.dast_target_url || '' }}
-      INPUT_SKIP_DEFECTDOJO: ${{ inputs.skip_defectdojo || false }}
     steps:
       - name: Checkout App Code (Código do Desenvolvedor)
         uses: actions/checkout@v4
@@ -346,15 +335,10 @@ jobs:
 
       # ──────────────────────────────────────────────────────────────────────
       # DefectDojo — Import de resultados
-      # Pulado quando skip_defectdojo=true (auto-testes internos).
       # ──────────────────────────────────────────────────────────────────────
-      - name: Validate DefectDojo secrets
-        if: env.INPUT_SKIP_DEFECTDOJO != 'true' && (secrets.DEFECTDOJO_URL == '' || secrets.DEFECTDOJO_API_KEY == '')
-        run: |
-          echo "::warning::DefectDojo secrets ausentes e skip_defectdojo=false — os imports serão pulados silenciosamente pelos steps seguintes."
 
       - name: Import Semgrep results to DefectDojo
-        if: always() && env.INPUT_SKIP_DEFECTDOJO != 'true'
+        if: always()
         run: |
           curl -X POST "${{ secrets.DEFECTDOJO_URL }}/api/v2/import-scan/" \
             -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
@@ -368,7 +352,7 @@ jobs:
             -F "verified=true"
 
       - name: Import Gitleaks results to DefectDojo
-        if: always() && env.INPUT_SKIP_DEFECTDOJO != 'true'
+        if: always()
         run: |
           curl -X POST "${{ secrets.DEFECTDOJO_URL }}/api/v2/import-scan/" \
             -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
@@ -382,7 +366,7 @@ jobs:
             -F "verified=true"
 
       - name: Import Trivy results to DefectDojo
-        if: always() && env.INPUT_SKIP_DEFECTDOJO != 'true'
+        if: always()
         run: |
           curl -X POST "${{ secrets.DEFECTDOJO_URL }}/api/v2/import-scan/" \
             -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \
@@ -396,7 +380,7 @@ jobs:
             -F "verified=true"
 
       - name: Import ZAP results to DefectDojo
-        if: env.INPUT_RUN_DAST == 'true' && env.INPUT_DAST_TARGET_URL != '' && env.INPUT_SKIP_DEFECTDOJO != 'true'
+        if: env.INPUT_RUN_DAST == 'true' && env.INPUT_DAST_TARGET_URL != ''
         run: |
           curl -X POST "${{ secrets.DEFECTDOJO_URL }}/api/v2/import-scan/" \
             -H "Authorization: Token ${{ secrets.DEFECTDOJO_API_KEY }}" \

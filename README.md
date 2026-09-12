@@ -29,16 +29,9 @@ A esteira opera com dois arquivos de workflow distintos:
 │  .github/workflows/pipeline.yml   ← Reusable Workflow          │
 │    • Trigger: workflow_call (consumidores) + workflow_dispatch   │
 │    • Inputs: project_name, stack_type, working_directory,       │
-│              run_dast, dast_target_url, skip_defectdojo         │
-│    • Secrets: DEFECTDOJO_URL, DEFECTDOJO_API_KEY (opcionais)    │
+│              run_dast, dast_target_url                          │
+│    • Secrets: DEFECTDOJO_URL, DEFECTDOJO_API_KEY                │
 │    • Jobs: setup stack → Gitleaks → Semgrep → Trivy → ZAP      │
-│                                                                 │
-│  .github/workflows/ci.yml         ← Auto-teste interno         │
-│    • Trigger: push/pull_request em main e develop               │
-│    • Chama pipeline.yml com skip_defectdojo: true               │
-│    • Testa 3 stacks (node, cpp, go) em paralelo                │
-│    • Fixtures em .github/self-test-fixtures/<stack>/            │
-│    • NÃO envia findings para o DefectDojo de produção           │
 └─────────────────────────────────────────────────────────────────┘
          ▲
          │  uses: joaohenrique11z/teste_esteira/...pipeline.yml@v1
@@ -65,23 +58,13 @@ Este é o coração da solução. Definido como um **Reusable Workflow** (`on: w
 4. **Setup da stack** — instala o toolchain correto com base no `stack_type` informado.
 5. **Scanners de segurança** — executa Gitleaks, Semgrep, Trivy e (opcionalmente) OWASP ZAP.
 6. **Upload de artefatos** — empacota todos os relatórios JSON em um artefato `devsecops-reports`.
-7. **Import para DefectDojo** — envia os resultados para o DefectDojo via API (pulado se `skip_defectdojo: true`).
-
-### `ci.yml` — Auto-teste Interno
-
-O arquivo `ci.yml` neste repositório é o **auto-teste da própria esteira**. Ele roda em todo push/PR para `main`/`develop` e valida que os scanners continuam funcionando corretamente em múltiplas stacks.
-
-**Características:**
-- Usa `skip_defectdojo: true` — **nenhum finding de teste é enviado para o DefectDojo de produção**
-- Testa 3 stacks em paralelo: Node.js, C/C++ e Go
-- As fixtures de código vulnerável ficam em `.github/self-test-fixtures/<stack>/`
-- Validação: se os scanners rodam sem erro e geram os relatórios JSON como artifacts, a esteira está funcionando
-
-> **Nota:** As fixtures em `.github/self-test-fixtures/` contêm código **propositalmente inseguro** para garantir que os scanners detectem vulnerabilidades. Esses achados nunca aparecem no DefectDojo de produção.
+7. **Import para DefectDojo** — envia os resultados para o DefectDojo via API.
 
 ### `ci.yml` — Arquivo do Projeto Consumidor
 
 Cada projeto que deseja consumir a esteira precisa criar um arquivo `.github/workflows/ci.yml` no seu próprio repositório. Este arquivo **não contém lógica de segurança** — ele apenas chama o `pipeline.yml` desta central via `uses:`, passando os parâmetros relevantes.
+
+**Atenção:** Este repositório central contém *apenas* o reusable workflow. Não há código de aplicação, testes automatizados próprios ou fixtures nele.
 
 ---
 
@@ -213,7 +196,6 @@ jobs:
 | `working_directory` | `string` | Não (default: `.`) | Subdiretório do projeto dentro do repositório (ex: `photo-studio/`) |
 | `run_dast` | `boolean` | Não (default: `false`) | Habilita o scan dinâmico com OWASP ZAP |
 | `dast_target_url` | `string` | Só se `run_dast: true` | URL da aplicação web/API alvo para o ZAP |
-| `skip_defectdojo` | `boolean` | Não (default: `false`) | Pula o envio de findings para o DefectDojo (usado no auto-teste interno) |
 
 ### Secrets
 
@@ -301,8 +283,6 @@ O DefectDojo organiza os dados em três níveis:
 | **Engagement** | Uma rodada de testes | `Automated CI/CD` (criado automaticamente) |
 
 A pipeline usa o endpoint `/api/v2/import-scan/` com `auto_create_context=true`, que cria automaticamente o **Product**, **Engagement** e **Test** no DefectDojo com base no `project_name`. Cada squad que consome a Central com um `project_name` diferente terá seus findings isolados automaticamente.
-
-> **Nota sobre o auto-teste interno:** o `ci.yml` deste repositório usa `skip_defectdojo: true`, garantindo que as fixtures de código vulnerável em `.github/self-test-fixtures/` **nunca poluam o DefectDojo de produção** com achados falsos.
 
 ---
 
