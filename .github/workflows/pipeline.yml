@@ -305,7 +305,7 @@ jobs:
       # Trivy FS aponta para o subdiretório do projeto para analisar
       # lockfiles e manifests corretos (ex: photo-studio/pnpm-lock.yaml).
       - name: Executar Trivy FS (Shadow Mode)
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
           scan-ref: ${{ steps.app-path.outputs.path }}
