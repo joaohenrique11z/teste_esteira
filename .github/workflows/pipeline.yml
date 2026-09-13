@@ -320,6 +320,7 @@ jobs:
         with:
           target: ${{ env.INPUT_DAST_TARGET_URL }}
           fail_action: false
+          allow_issue_writing: false
 
       - name: Mover relatórios ZAP
         if: env.INPUT_RUN_DAST == 'true' && env.INPUT_DAST_TARGET_URL != ''
